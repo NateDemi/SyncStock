@@ -17,6 +17,10 @@ on:
         required: false
         type: boolean
         default: false
+  
+  # Allow external webhooks to trigger the workflow
+  repository_dispatch:
+    types: [syncstock-sync]
 
 jobs:
   sync:
@@ -46,12 +50,27 @@ jobs:
     
     - name: Run SyncStock
       run: |
-        if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ github.event.inputs.start_date }}" ]; then
+        # Handle repository_dispatch webhook payload
+        if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+          if [ -n "${{ github.event.client_payload.start_date }}" ]; then
+            if [ "${{ github.event.client_payload.force_refresh }}" == "true" ]; then
+              echo "Webhook: Running force refresh from date: ${{ github.event.client_payload.start_date }}"
+              python syncstock.py "${{ github.event.client_payload.start_date }}"
+            else
+              echo "Webhook: Running sync with start date: ${{ github.event.client_payload.start_date }}"
+              python syncstock.py '{"start_date": "${{ github.event.client_payload.start_date }}"}'
+            fi
+          else
+            echo "Webhook: Running default sync (no start date specified)"
+            python syncstock.py
+          fi
+        # Handle manual workflow_dispatch
+        elif [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ github.event.inputs.start_date }}" ]; then
           if [ "${{ github.event.inputs.force_refresh }}" == "true" ]; then
-            echo "Running force refresh from date: ${{ github.event.inputs.start_date }}"
+            echo "Manual: Running force refresh from date: ${{ github.event.inputs.start_date }}"
             python syncstock.py "${{ github.event.inputs.start_date }}"
           else
-            echo "Running sync with start date: ${{ github.event.inputs.start_date }}"
+            echo "Manual: Running sync with start date: ${{ github.event.inputs.start_date }}"
             python syncstock.py '{"start_date": "${{ github.event.inputs.start_date }}"}'
           fi
         else
