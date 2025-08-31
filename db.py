@@ -10,22 +10,57 @@ from psycopg.rows import dict_row
 logger = logging.getLogger(__name__)
 
 load_dotenv()
-PG_DSN = os.getenv("PG_DSN")
+
+def _build_dsn():
+    """Build PostgreSQL connection string from individual environment variables"""
+    host = os.getenv("DB_HOST")
+    port = os.getenv("DB_PORT", "5432")
+    user = os.getenv("DB_USER")
+    password = os.getenv("DB_PASSWORD")
+    database = os.getenv("DB_NAME")
+    
+    # Check required variables
+    missing = []
+    if not host:
+        missing.append("DB_HOST")
+    if not user:
+        missing.append("DB_USER")
+    if not password:
+        missing.append("DB_PASSWORD")
+    if not database:
+        missing.append("DB_NAME")
+    
+    if missing:
+        logger.error(f"Missing required environment variables: {', '.join(missing)}")
+        raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+    
+    # Construct DSN
+    dsn = f"postgresql://{user}:{password}@{host}:{port}/{database}"
+    logger.debug(f"Database connection string configured: {dsn[:20]}...")
+    return dsn
+
+# Get DSN - will be built when first accessed
+PG_DSN = None
+
+def _get_dsn():
+    """Get DSN, building it if needed"""
+    global PG_DSN
+    if PG_DSN is None:
+        PG_DSN = _build_dsn()
+    return PG_DSN
 
 def _require_dsn():
-    if not PG_DSN:
-        logger.error("PG_DSN environment variable not set")
-        raise RuntimeError("PG_DSN not set")
-    logger.debug(f"Database connection string configured: {PG_DSN[:20]}...")
+    """Ensure DSN is available"""
+    _get_dsn()
 
 @contextmanager
 def conn_cursor():
     """Yields (conn, cur) with dict rows; caller controls BEGIN/COMMIT."""
     logger.debug("Creating database connection and cursor")
-    _require_dsn()
+    dsn = _get_dsn()
     
     try:
-        with psycopg.connect(PG_DSN, row_factory=dict_row) as conn:
+        with psycopg.connect(dsn, row_factory=dict_row) as conn:
             logger.debug("Database connection established")
             with conn.cursor() as cur:
                 logger.debug("Database cursor created")

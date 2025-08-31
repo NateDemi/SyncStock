@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS syncstock.stock (
 
 -- 3) Daily ledger (rollup by order_created_date)
 CREATE TABLE IF NOT EXISTS syncstock.ledger (
-  order_created_date date NOT NULL,   -- calendar date (sales & purchases rolled up)
+  order_created_date date NOT NULL,   
   inventory_id       text NOT NULL REFERENCES store_data.inventory_items(id),
   purchased_qty      integer NOT NULL DEFAULT 0,
   sold_qty           integer NOT NULL DEFAULT 0,

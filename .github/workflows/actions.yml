@@ -38,7 +38,11 @@ jobs:
     
     - name: Set up environment
       run: |
-        echo "PG_DSN=${{ secrets.PG_DSN }}" >> .env
+        echo "DB_HOST=${{ vars.DB_HOST }}" >> .env
+        echo "DB_PORT=${{ vars.DB_PORT }}" >> .env
+        echo "DB_USER=${{ vars.DB_USER }}" >> .env
+        echo "DB_NAME=${{ vars.DB_NAME }}" >> .env
+        echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
     
     - name: Run SyncStock
       run: |
