@@ -1,0 +1,66 @@
+name: SyncStock Daily Sync
+
+on:
+  # Run daily at 10 PM EST (3 AM UTC next day)
+  schedule:
+    - cron: '0 3 * * *'
+  
+  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: 'Optional start date (YYYY-MM-DD) for manual sync'
+        required: false
+        type: string
+      force_refresh:
+        description: 'Force refresh from specific date'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Set up environment
+      run: |
+        echo "PG_DSN=${{ secrets.PG_DSN }}" >> .env
+    
+    - name: Run SyncStock
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ github.event.inputs.start_date }}" ]; then
+          if [ "${{ github.event.inputs.force_refresh }}" == "true" ]; then
+            echo "Running force refresh from date: ${{ github.event.inputs.start_date }}"
+            python syncstock.py "${{ github.event.inputs.start_date }}"
+          else
+            echo "Running sync with start date: ${{ github.event.inputs.start_date }}"
+            python syncstock.py '{"start_date": "${{ github.event.inputs.start_date }}"}'
+          fi
+        else
+          echo "Running default sync (resume from watermark or 30-day lookback)"
+          python syncstock.py
+        fi
+    
+    - name: Check sync status
+      run: |
+        python -c "
+        from db import conn_cursor
+        with conn_cursor() as (conn, cur):
+            cur.execute('SELECT last_sales_day_done, run_status FROM syncstock.meta WHERE id = TRUE')
+            meta = cur.fetchone()
+            print(f'✅ Sync completed - Last processed day: {meta[\"last_sales_day_done\"]}, Status: {meta[\"run_status\"]}')
+        "
