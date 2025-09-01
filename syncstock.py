@@ -1,3 +1,4 @@
+import os
 from datetime import date, timedelta
 from collections import defaultdict
 from typing import Dict, List, Tuple, Optional
@@ -15,13 +16,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def pick_window(cur, user_lookback_start: Optional[date]) -> Tuple[date, date]:
+def pick_window(cur, user_lookback_start: Optional[date]) -> Tuple[date, date, int]:
     # today for end bound (exclusive)
     cur.execute(Q.sql_now()); nowrow = cur.fetchone() or {}
     today = nowrow.get("today") or (nowrow.get("now").date() if nowrow.get("now") else date.today())
 
-    # Always compute last 7 days by default
-    default_start = today - timedelta(days=7)
+        # Get lookback period from environment variable, default to 7 days
+    import os
+    lookback_days = int(os.getenv("LOOKBACK_DAYS", "7"))
+    default_start = today - timedelta(days=lookback_days)
     
     # If user specified a date, use that instead
     if user_lookback_start:
@@ -29,13 +32,13 @@ def pick_window(cur, user_lookback_start: Optional[date]) -> Tuple[date, date]:
         logger.info(f"Using user-specified start date: {start}")
     else:
         start = default_start
-        logger.info(f"Using default 7-day lookback from: {start}")
+        logger.info(f"Using default {lookback_days}-day lookback from: {start}")
     
     # include today; end is exclusive (process [start, end))
     end = today + timedelta(days=1)
     
     logger.info(f"Processing window: {start} to {end} ({(end - start).days} days)")
-    return start, end
+    return start, end, lookback_days
 
 def fetch_daily(cur, start: date, end: date):
     logger.debug(f"Fetching daily data from {start} to {end}")
@@ -217,7 +220,7 @@ def run_daily_rollup(user_lookback_start: Optional[date] = None, is_webhook: boo
         logger.debug("Advisory lock acquired successfully")
         
         try:
-            start, end = pick_window(cur, user_lookback_start)
+            start, end, lookback_days = pick_window(cur, user_lookback_start)
             logger.info(f"   Processing date range: {start} to {end}")
             
             if start >= end:
@@ -248,22 +251,22 @@ def run_daily_rollup(user_lookback_start: Optional[date] = None, is_webhook: boo
                     execute_values(cur, Q.sql_upsert_ledger(), ledger_rows)
                     logger.info(f"   ✅ Inserted {len(ledger_rows)} ledger records")
                     
-                    # mark watermark to 7 days ago from today (always)
-                    watermark_date = date.today() - timedelta(days=7)
-                    logger.debug(f"Setting watermark to 7 days ago: {watermark_date}")
+                    # mark watermark to lookback days ago from today (always)
+                    watermark_date = date.today() - timedelta(days=lookback_days)
+                    logger.debug(f"Setting watermark to {lookback_days} days ago: {watermark_date}")
                     cur.execute(Q.sql_advance_sales_day_watermark(), (watermark_date,))
-                    logger.info(f"   ✅ Set watermark to {watermark_date} (7 days ago)")
+                    logger.info(f"   ✅ Set watermark to {watermark_date} ({lookback_days} days ago)")
                     
                     # refresh current stock from latest day
                     logger.debug("Updating current stock from latest day")
                     cur.execute(Q.sql_upsert_stock_from_latest_day())
                     logger.info(f"   ✅ Updated current stock from latest day")
                 else:
-                    # nothing moved; still set watermark to 7 days ago
-                    watermark_date = today - timedelta(days=7)
-                    logger.debug(f"No data to process, setting watermark to 7 days ago: {watermark_date}")
+                    # nothing moved; still set watermark to lookback days ago
+                    watermark_date = date.today() - timedelta(days=lookback_days)
+                    logger.debug(f"No data to process, setting watermark to {lookback_days} days ago: {watermark_date}")
                     cur.execute(Q.sql_advance_sales_day_watermark(), (watermark_date,))
-                    logger.info(f"   ✅ Set watermark to {watermark_date} (7 days ago, no data processed)")
+                    logger.info(f"   ✅ Set watermark to {watermark_date} ({lookback_days} days ago, no data processed)")
                 
                 logger.debug("Committing transaction")
                 conn.commit()

@@ -68,17 +68,27 @@ SyncStock solves the common inventory synchronization problem by:
 - **Watermark management** - Tracks last processed timestamp per data source
 - **Temp table isolation** - Each run uses isolated temporary tables
 
-## Installation
+## Configuration
 
-### 1. Database Setup
+### Environment Variables
 
-```sql
--- Run the schema file
-\i schema.sql
+SyncStock uses the following environment variables for configuration:
 
--- Run the core implementation
-\i syncstock_core.sql
+```bash
+# Database connection (required)
+DB_HOST=your_db_host
+DB_PORT=5432
+DB_USER=your_db_user
+DB_NAME=your_db_name
+DB_PASSWORD=your_db_password
+
+# SyncStock configuration (optional)
+LOOKBACK_DAYS=7  # Default lookback period in days (7, 14, 30, etc.) - set as GitHub repository variable
 ```
+
+**LOOKBACK_DAYS**: Controls the default number of days to look back when no specific start date is provided. This affects both the processing window and the watermark tracking.
+
+## Installation
 
 ### 2. Python Setup
 

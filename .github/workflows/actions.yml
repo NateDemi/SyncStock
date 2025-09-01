@@ -12,6 +12,7 @@ on:
         description: 'Optional start date (YYYY-MM-DD) for manual sync'
         required: false
         type: string
+
       force_refresh:
         description: 'Force refresh from specific date'
         required: false
@@ -25,6 +26,7 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    environment: prod
     
     steps:
     - name: Checkout code
@@ -47,6 +49,7 @@ jobs:
         echo "DB_USER=${{ vars.DB_USER }}" >> .env
         echo "DB_NAME=${{ vars.DB_NAME }}" >> .env
         echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+        echo "LOOKBACK_DAYS=${{ vars.LOOKBACK_DAYS || '7' }}" >> .env
     
     - name: Run SyncStock
       run: |
@@ -65,16 +68,21 @@ jobs:
             python syncstock.py
           fi
         # Handle manual workflow_dispatch
-        elif [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ github.event.inputs.start_date }}" ]; then
-          if [ "${{ github.event.inputs.force_refresh }}" == "true" ]; then
-            echo "Manual: Running force refresh from date: ${{ github.event.inputs.start_date }}"
-            python syncstock.py "${{ github.event.inputs.start_date }}"
+        elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          if [ -n "${{ github.event.inputs.start_date }}" ]; then
+            if [ "${{ github.event.inputs.force_refresh }}" == "true" ]; then
+              echo "Manual: Running force refresh from date: ${{ github.event.inputs.start_date }}"
+              python syncstock.py "${{ github.event.inputs.start_date }}"
+            else
+              echo "Manual: Running sync with start date: ${{ github.event.inputs.start_date }}"
+              python syncstock.py '{"start_date": "${{ github.event.inputs.start_date }}"}'
+            fi
           else
-            echo "Manual: Running sync with start date: ${{ github.event.inputs.start_date }}"
-            python syncstock.py '{"start_date": "${{ github.event.inputs.start_date }}"}'
+            echo "Manual: Running default sync with LOOKBACK_DAYS=${{ vars.LOOKBACK_DAYS || '7' }}"
+            python syncstock.py
           fi
         else
-          echo "Running default sync (resume from watermark or 30-day lookback)"
+          echo "Running default sync (resume from watermark or configurable lookback)"
           python syncstock.py
         fi
     
