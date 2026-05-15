@@ -1,0 +1,24 @@
+name: Keepalive
+
+# Pushes an empty commit weekly so GitHub doesn't auto-disable the scheduled
+# SyncStock workflow under its 60-day repo-inactivity rule.
+
+on:
+  schedule:
+    - cron: '0 12 * * 1'  # every Monday at 12:00 UTC
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push empty commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "chore: keepalive [skip ci]"
+          git push

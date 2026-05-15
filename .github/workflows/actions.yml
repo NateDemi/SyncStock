@@ -1,9 +1,9 @@
 name: SyncStock Daily Sync
 
 on:
-  # Run daily at 10 PM EST (3 AM UTC next day)
+  # Run daily at 9:30 PM EST / 10:30 PM EDT (after 9 PM store close)
   schedule:
-    - cron: '0 3 * * *'
+    - cron: '30 2 * * *'
   
   # Allow manual trigger from GitHub UI
   workflow_dispatch:
@@ -50,10 +50,11 @@ jobs:
         echo "DB_NAME=${{ vars.DB_NAME }}" >> .env
         echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
         echo "LOOKBACK_DAYS=${{ vars.LOOKBACK_DAYS || '7' }}" >> .env
+        echo "PREVENT_NEGATIVE_STOCK=${{ vars.PREVENT_NEGATIVE_STOCK || 'false' }}" >> .env
     
     - name: Run SyncStock
       run: |
-        # Handle repository_dispatch webhook payload
+        # Handle repository_dispatch webhook paylo
         if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
           if [ -n "${{ github.event.client_payload.start_date }}" ]; then
             if [ "${{ github.event.client_payload.force_refresh }}" == "true" ]; then
